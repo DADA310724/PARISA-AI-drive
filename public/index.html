@@ -180,17 +180,35 @@
 <!-- Audio call -->
 <div class="fullscreen call" id="audioCallView" hidden>
   <div class="call-bg"></div>
-  <div class="call-orb">
-    <div class="orb-ring r1"></div>
-    <div class="orb-ring r2"></div>
-    <div class="orb-ring r3"></div>
-    <div class="orb-core"></div>
+  <div class="call-header">
+    <div class="call-name">PARISA</div>
+    <div class="call-status" id="audioCallStatus">শুনছি…</div>
   </div>
-  <div class="call-status" id="audioCallStatus">শুনছি…</div>
+  <div class="avatar-wrap" id="avatarWrap">
+    <div class="avatar-ring ar1"></div>
+    <div class="avatar-ring ar2"></div>
+    <div class="avatar-ring ar3"></div>
+    <div class="avatar-glow"></div>
+    <div class="avatar-circle" id="avatarCircle">
+      <img src="logo.jpg" alt="PARISA" class="avatar-photo" id="avatarPhoto" />
+      <div class="avatar-blink" id="avatarBlink"></div>
+    </div>
+  </div>
+  <div class="audio-wave" id="audioWave">
+    <span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
   <div class="call-caption" id="audioCallCaption"></div>
-  <div class="call-controls">
-    <button class="call-btn end" id="endAudioCall">কল শেষ</button>
-    <button class="ic-btn lg" id="muteAudioCall"><svg class="ic"><use href="#i-mic"/></svg></button>
+  <div class="call-controls-row">
+    <button class="ctrl-btn mute" id="muteAudioCall">
+      <svg class="ic"><use href="#i-mic"/></svg>
+    </button>
+    <button class="ctrl-btn end-call" id="endAudioCall">
+      <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+    </button>
+    <button class="ctrl-btn speaker" id="speakerAudioCall">
+      <svg class="ic"><use href="#i-volume"/></svg>
+    </button>
   </div>
 </div>
 
@@ -200,14 +218,29 @@
   <canvas id="videoCallCanvas" hidden></canvas>
   <div class="call-overlay">
     <div class="call-top">
-      <div class="call-title">ভিডিও কল • পারিসা</div>
-      <div class="call-status sm" id="videoCallStatus">কানেক্টেড</div>
+      <button class="ic-btn" id="flipVideoCall"><svg class="ic"><use href="#i-flip"/></svg></button>
+      <div class="vc-info">
+        <div class="call-title">ভিডিও কল • পারিসা</div>
+        <div class="call-status sm" id="videoCallStatus">কানেক্টেড</div>
+      </div>
+      <div class="vc-ai-thumb">
+        <img src="logo.jpg" alt="AI" />
+        <div class="vc-ai-wave" id="vcAiWave">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
     </div>
     <div class="call-caption" id="videoCallCaption"></div>
-    <div class="call-controls">
-      <button class="call-btn end" id="endVideoCall">কল শেষ</button>
-      <button class="ic-btn lg" id="muteVideoCall"><svg class="ic"><use href="#i-mic"/></svg></button>
-      <button class="ic-btn lg" id="flipVideoCall"><svg class="ic"><use href="#i-flip"/></svg></button>
+    <div class="call-controls-row">
+      <button class="ctrl-btn mute" id="muteVideoCall">
+        <svg class="ic"><use href="#i-mic"/></svg>
+      </button>
+      <button class="ctrl-btn end-call" id="endVideoCall">
+        <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+      </button>
+      <button class="ctrl-btn ask-video" id="askVideoBtn">
+        <svg class="ic"><use href="#i-camera"/></svg>
+      </button>
     </div>
   </div>
 </div>

@@ -123,8 +123,16 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   }
 
   function renderMarkdown(text) {
-    try { return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true })); }
-    catch { return text.replace(/\n/g, "<br/>"); }
+    try {
+      text = text.replace(/\[IMAGE:([A-Za-z0-9_\-]+)\]/g,
+        (_, id) => `<img src="${BASE}/image/${id}" class="drive-img" loading="lazy" />`
+      );
+      return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }), {
+        ADD_TAGS: ["img"], ADD_ATTR: ["src", "class", "loading"]
+      });
+    }
+    catch { return text.replace(/
+/g, "<br/>"); }
   }
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
   function escapeHtml(s) {
@@ -479,17 +487,32 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   };
 
   // ── Audio call ─────────────────────────────────────────────────────
-  let callOn = false, callRecognizer = null;
+  let callOn = false, callRecognizer = null, callMuted = false;
   $("#audioCallBtn").onclick  = () => startAudioCall();
   $("#endAudioCall").onclick  = () => endAudioCall();
-  $("#muteAudioCall").onclick = () => { if (callRecognizer) callRecognizer.stop(); };
+  $("#muteAudioCall").onclick = () => {
+    callMuted = !callMuted;
+    $("#muteAudioCall").classList.toggle("muted", callMuted);
+    if (callMuted && callRecognizer) { try { callRecognizer.stop(); } catch {} }
+    else if (!callMuted && callOn) callLoop();
+  };
+
+  function setAvatarState(state) {
+    const circle = $("#avatarCircle");
+    const wave = $("#audioWave");
+    if (!circle || !wave) return;
+    circle.className = "avatar-circle " + state;
+    wave.className = "audio-wave " + state;
+    const status = { listening: "শুনছি…", talking: "বলছি…", thinking: "ভাবছি…" };
+    if (status[state]) $("#audioCallStatus").textContent = status[state];
+  }
 
   async function startAudioCall() {
     if (!SR) { alert("ব্রাউজার ভয়েস কল সাপোর্ট করে না।"); return; }
-    callOn = true;
+    callOn = true; callMuted = false;
     $("#audioCallView").hidden = false;
-    $("#audioCallStatus").textContent = "শুনছি…";
     $("#audioCallCaption").textContent = "";
+    setAvatarState("listening");
     callLoop();
   }
   function endAudioCall() {
@@ -499,7 +522,7 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     $("#audioCallView").hidden = true;
   }
   function callLoop() {
-    if (!callOn) return;
+    if (!callOn || callMuted) return;
     callRecognizer = makeRecognizer();
     if (!callRecognizer) return;
     let finalText = "";
@@ -512,14 +535,14 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       if (!callOn) return;
       const said = finalText.trim();
       if (!said) return setTimeout(callLoop, 200);
-      $("#audioCallStatus").textContent = "ভাবছি…";
+      setAvatarState("thinking");
       const reply = await callChat(said);
       if (!callOn) return;
-      $("#audioCallStatus").textContent = "বলছি…";
+      setAvatarState("talking");
       $("#audioCallCaption").textContent = reply;
       await speakAndWait(reply);
       if (!callOn) return;
-      $("#audioCallStatus").textContent = "শুনছি…";
+      setAvatarState("listening");
       callLoop();
     };
     callRecognizer.start();
@@ -541,11 +564,37 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   }
 
   // ── Video call ─────────────────────────────────────────────────────
-  let vcStream = null, vcFacing = "user", vcOn = false, vcRecognizer = null;
+  let vcStream = null, vcFacing = "user", vcOn = false, vcRecognizer = null, vcMuted = false;
   $("#videoCallBtn").onclick   = () => startVideoCall();
   $("#endVideoCall").onclick   = () => endVideoCall();
   $("#flipVideoCall").onclick  = async () => { vcFacing = vcFacing === "user" ? "environment" : "user"; await openVcCam(); };
-  $("#muteVideoCall").onclick  = () => { if (vcRecognizer) vcRecognizer.stop(); };
+  $("#muteVideoCall").onclick  = () => {
+    vcMuted = !vcMuted;
+    $("#muteVideoCall").classList.toggle("muted", vcMuted);
+    if (vcMuted && vcRecognizer) { try { vcRecognizer.stop(); } catch {} }
+    else if (!vcMuted && vcOn) videoCallLoop();
+  };
+  $("#askVideoBtn").onclick = () => {
+    const img = snapshot($("#videoCallVideo"), $("#videoCallCanvas"));
+    setVcState("thinking");
+    fetch(api("/analyze"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "এই ভিডিওতে কী দেখছ? বাংলায় বিস্তারিত বল।", file: img, mime: "image/jpeg", userName: settings.userName })
+    }).then(r => r.json()).then(d => {
+      const reply = d.reply || "বুঝতে পারলাম না।";
+      $("#videoCallCaption").textContent = reply;
+      setVcState("talking");
+      speakAndWait(reply).then(() => setVcState("idle"));
+    }).catch(() => setVcState("idle"));
+  };
+
+  function setVcState(state) {
+    const wave = $("#vcAiWave");
+    if (!wave) return;
+    wave.className = "vc-ai-wave " + (state === "talking" ? "" : "idle");
+    const statuses = { talking: "বলছি…", thinking: "ভাবছি…", idle: "কানেক্টেড", listening: "শুনছি…" };
+    $("#videoCallStatus").textContent = statuses[state] || "কানেক্টেড";
+  }
 
   async function openVcCam() {
     try {
@@ -581,7 +630,7 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       if (!vcOn) return;
       const said = finalText.trim();
       if (!said) return setTimeout(videoCallLoop, 200);
-      $("#videoCallStatus").textContent = "ভাবছি…";
+      setVcState("thinking");
       const img = snapshot($("#videoCallVideo"), $("#videoCallCanvas"));
       try {
         const r = await fetch(api("/analyze"), {
@@ -590,12 +639,12 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
         });
         const data = await r.json();
         const reply = data.reply || "কিছু বুঝতে পারলাম না।";
-        $("#videoCallStatus").textContent = "বলছি…";
+        setVcState("talking");
         $("#videoCallCaption").textContent = reply;
         await speakAndWait(reply);
       } catch { $("#videoCallCaption").textContent = "নেটওয়ার্ক সমস্যা"; }
       if (!vcOn) return;
-      $("#videoCallStatus").textContent = "কানেক্টেড";
+      setVcState("listening");
       videoCallLoop();
     };
     vcRecognizer.start();
