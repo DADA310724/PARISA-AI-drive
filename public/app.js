@@ -124,7 +124,7 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
 
   function renderMarkdown(text) {
     try {
-      text = text.replace(/\[IMAGE:([A-Za-z0-9_\-]+)\]/g,
+      text = text.replace(/\[IMAGE:([\w\-]+)\]/g,
         (_, id) => `<img src="${BASE}/image/${id}" class="drive-img" loading="lazy" onerror="this.style.display='none'" />`
       );
       const html = marked.parse(text, { breaks: true, gfm: true, mangle: false, headerIds: false });
