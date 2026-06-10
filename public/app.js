@@ -125,14 +125,14 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   function renderMarkdown(text) {
     try {
       text = text.replace(/\[IMAGE:([A-Za-z0-9_\-]+)\]/g,
-        (_, id) => `<img src="${BASE}/image/${id}" class="drive-img" loading="lazy" />`
+        (_, id) => `<img src="${BASE}/image/${id}" class="drive-img" loading="lazy" onerror="this.style.display='none'" />`
       );
-      return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }), {
-        ADD_TAGS: ["img"], ADD_ATTR: ["src", "class", "loading"]
+      const html = marked.parse(text, { breaks: true, gfm: true, mangle: false, headerIds: false });
+      return DOMPurify.sanitize(html, {
+        ADD_TAGS: ["img"], ADD_ATTR: ["src", "class", "loading", "onerror"]
       });
     }
-    catch { return text.replace(/
-/g, "<br/>"); }
+    catch { return text.replace(/\n/g, "<br/>"); }
   }
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
   function escapeHtml(s) {
