@@ -415,9 +415,10 @@ function buildSystemPrompt(userName = "আপনি") {
 - প্রমাণ না থাকলে স্পষ্ট বলবে
 - ব্যবহারকারীকে সম্মানের সাথে ভালোবাসার সাথে কথা বলবে
 - কেউ "Hi", "Hello", "হ্যালো" বললে "ওয়ালাইকুম সালাম" বলবে না — স্বাভাবিক বাংলায় সাড়া দেবে যেমন "হ্যাঁ দাদা, বলুন!" বা "কেমন আছেন দাদা?"
-- কখনো ফাইলের নাম যেমন "history-context-2.txt", "My Wife...😘😘" ইত্যাদি উল্লেখ করবে না — এগুলো অভ্যন্তরীণ
-- কখনো "রেফারেন্স:", "খণ্ড ২", "টাইমলাইনে উল্লেখ আছে" এই ধরনের technical কথা বলবে না
-- সরাসরি স্বাভাবিকভাবে উত্তর দেবে যেন তুমি সব মনে রাখো
+- কখনোই ফাইলের নাম যেমন "history-context-2.txt", "My Wife...😘😘", "history-context-1.txt" ইত্যাদি উল্লেখ করবে না
+- কখনোই "রেফারেন্স:", "খণ্ড ২", "টাইমলাইনে উল্লেখ আছে", "(রেফারেন্স:", "ফাইল থেকে নেওয়া" এই ধরনের কিছু বলবে না
+- তুমি যা জানো সেটা নিজের মতো করে বলবে — যেন তুমি সব নিজে মনে রাখো
+- কোনো তথ্যের source কখনো mention করবে না
 - স্ক্রিনশট দেখাতে হলে [IMAGE:FILE_ID] format ব্যবহার করো
 - বাংলা সংখ্যা (১২৩৪৫) ব্যবহার করো, English number (12345) নয়
 
@@ -450,10 +451,12 @@ ${screenshotList || "স্ক্রিনশট লোড হচ্ছে..."}
 ${callList || "কল রেকর্ড লোড হচ্ছে..."}
 
 --- ছবি দেখানোর নিয়ম ---
-যখন কোনো স্ক্রিনশট বা ছবি দেখাতে হবে, এই exact format ব্যবহার করো:
+যখন স্ক্রিনশট দেখাতে হবে, এই format ব্যবহার করো:
 [IMAGE:FILE_ID_HERE]
 উদাহরণ: [IMAGE:1Ev_27tCZbH8xU3eZ1RMEf-UgjMMtz3gr]
-ফাইল ID হলো Drive link-এর /d/ এর পরের অংশ।`;
+- স্ক্রিনশট তালিকায় নাম ও তারিখ দেখে সঠিক file ID বেছে নাও
+- একসাথে সর্বোচ্চ ৩টা ছবি দেখাবে
+- ছবির পর সংক্ষেপে বলো এটা কোন প্রসঙ্গের`;
 }
 
 // ─── AI Providers ─────────────────────────────────────────────────
@@ -620,6 +623,44 @@ function mount(prefix) {
       keys: { gemini: geminiPool.size, groq: groqPool.size, openrouter: orPool.size, deepseek: deepseekPool.size },
     })
   );
+
+  // ── Screenshot Vision Analysis ────────────────────────────────────
+  app.get(prefix + "/vision/:fileId", async (req, res) => {
+    const auth = getDriveAuth();
+    if (!auth) return res.status(503).json({ error: "Drive not configured" });
+    try {
+      const drive = google.drive({ version: "v3", auth });
+      const r = await drive.files.get(
+        { fileId: req.params.fileId, alt: "media" },
+        { responseType: "arraybuffer" }
+      );
+      const b64 = Buffer.from(r.data).toString("base64");
+      // Groq Vision দিয়ে analyze
+      const groqKey = [...groqPool][0];
+      if (!groqKey) return res.json({ description: "Vision API unavailable" });
+      const vRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: "meta-llama/llama-4-scout-17b-16e-instruct",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } },
+              { type: "text", text: "এই স্ক্রিনশটে কী লেখা আছে? বাংলায় সংক্ষেপে বলো।" }
+            ]
+          }],
+          max_tokens: 500
+        })
+      });
+      const vData = await vRes.json();
+      const desc = vData?.choices?.[0]?.message?.content || "বিবরণ পাওয়া যায়নি";
+      res.json({ description: desc });
+    } catch (e) {
+      console.warn("vision:", e.message);
+      res.json({ description: "বিবরণ পাওয়া যায়নি" });
+    }
+  });
 
   // ── Drive Image Proxy ─────────────────────────────────────────────
   app.get(prefix + "/image/:fileId", async (req, res) => {

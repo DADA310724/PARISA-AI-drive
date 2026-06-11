@@ -122,6 +122,11 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     return acts;
   }
 
+  // বাংলা সংখ্যা ঠিক করো
+  function fixBengaliNumbers(text) {
+    return text.replace(/[0-9]/g, d => '০১২৩৪৫৬৭৮৯'[d]);
+  }
+
   function renderMarkdown(text) {
     try {
       // Step 1: markdown parse
@@ -226,6 +231,24 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   };
   $("#testVoice").onclick = () => {
     speak("আসসালামু ওয়ালাইকুম। আমি পারিসা, আপনাকে স্বাগতম।");
+  };
+
+  // Drive refresh button
+  $("#refreshDrive").onclick = async () => {
+    const btn = $("#refreshDrive");
+    const status = $("#refreshStatus");
+    btn.disabled = true;
+    btn.textContent = "⏳ আপডেট হচ্ছে...";
+    status.textContent = "";
+    try {
+      const r = await fetch(api("/drive/refresh"), { method: "GET" });
+      const d = await r.json();
+      status.textContent = d.files ? `✅ ${d.files}টি ফাইল লোড হয়েছে` : "✅ আপডেট সম্পন্ন";
+    } catch (e) {
+      status.textContent = "❌ আপডেট ব্যর্থ হয়েছে";
+    }
+    btn.disabled = false;
+    btn.textContent = "🔄 এখনই আপডেট করুন";
   };
 
   // ── Voice: Microsoft Edge TTS ─────────────────────────────────────
