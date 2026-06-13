@@ -252,70 +252,72 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       .replace(/\s+/g, " ").trim();
   }
 
+  // ── Microsoft Edge TTS — server /voice endpoint ──────────────────
+  async function fetchEdgeTTS(text) {
+    text = stripEmoji(text);
+    if (!text) return null;
+    try {
+      const r = await fetch(api("/voice"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 2000), gender: settings.voiceGender || "female" }),
+      });
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      if (blob.size < 100) return null;
+      return URL.createObjectURL(blob);
+    } catch { return null; }
+  }
+
   function speak(text, btn = null) {
     if (!text || !text.trim()) return;
-    text = stripEmoji(text);
-    if (!text) return;
-
-    // আগের audio বন্ধ করো
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
-
     if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> চলছে`;
 
-    const utter = new SpeechSynthesisUtterance(text.slice(0, 1500));
-    utter.lang  = "bn-BD";
-    utter.rate  = 0.92;
-    utter.pitch = 1.0;
-
-    // voice load হওয়ার পর set করো
-    const setVoice = () => {
-      const v = getBanglaVoice(settings.voiceGender || "female");
-      if (v) utter.voice = v;
-    };
-    if (speechSynthesis.getVoices().length) {
-      setVoice();
-    } else {
-      speechSynthesis.onvoiceschanged = setVoice;
-    }
-
-    utter.onend = () => {
-      currentUtter = null;
-      if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
-    };
-    utter.onerror = () => {
-      currentUtter = null;
-      if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
-    };
-
-    currentUtter = utter;
-    speechSynthesis.speak(utter);
+    fetchEdgeTTS(text).then(url => {
+      if (url) {
+        const audio = new Audio(url);
+        currentAudio = audio;
+        audio.onended = () => {
+          currentAudio = null;
+          URL.revokeObjectURL(url);
+          if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+        };
+        audio.onerror = () => {
+          currentAudio = null;
+          URL.revokeObjectURL(url);
+          if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+        };
+        audio.play().catch(() => {});
+      } else {
+        if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+      }
+    });
   }
 
   function speakAndWait(text) {
     return new Promise((resolve) => {
       if (!text || !text.trim()) return resolve();
-      text = stripEmoji(text);
-      if (!text) return resolve();
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
       if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
 
-      const utter = new SpeechSynthesisUtterance(text.slice(0, 1500));
-      utter.lang  = "bn-BD";
-      utter.rate  = 0.92;
-      utter.pitch = 1.0;
-
-      const setVoice = () => {
-        const v = getBanglaVoice(settings.voiceGender || "female");
-        if (v) utter.voice = v;
-      };
-      if (speechSynthesis.getVoices().length) setVoice();
-      else speechSynthesis.onvoiceschanged = setVoice;
-
-      utter.onend   = () => { currentUtter = null; resolve(); };
-      utter.onerror = () => { currentUtter = null; resolve(); };
-      currentUtter  = utter;
-      speechSynthesis.speak(utter);
+      fetchEdgeTTS(text).then(url => {
+        if (!url) return resolve();
+        const audio = new Audio(url);
+        currentAudio = audio;
+        audio.onended = () => {
+          currentAudio = null;
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.onerror = () => {
+          currentAudio = null;
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.play().catch(() => resolve());
+      }).catch(() => resolve());
     });
   }
 
