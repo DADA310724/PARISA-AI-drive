@@ -123,7 +123,14 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   }
 
   function renderMarkdown(text) {
-    try { return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true })); }
+    text = text.replace(/\[IMAGE:([A-Za-z0-9_\-]+)\]/g,
+      '<img src="/image/$1" class="drive-img" alt="স্ক্রিনশট" loading="lazy" onerror="this.style.display=\'none\'">');
+    try {
+      return DOMPurify.sanitize(
+        marked.parse(text, { breaks: true, gfm: true }),
+        { ADD_TAGS: ["img"], ADD_ATTR: ["src", "class", "alt", "loading", "onerror"] }
+      );
+    }
     catch { return text.replace(/\n/g, "<br/>"); }
   }
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
@@ -252,9 +259,29 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       .replace(/\s+/g, " ").trim();
   }
 
+  function stripForTTS(str) {
+    return stripEmoji(str)
+      .replace(/\[IMAGE:[^\]]*\]/g, "")
+      .replace(/#{1,6}\s+/g, "")
+      .replace(/\*\*(.+?)\*\*/gs, "$1")
+      .replace(/\*(.+?)\*/gs, "$1")
+      .replace(/__(.+?)__/gs, "$1")
+      .replace(/_(.+?)_/gs, "$1")
+      .replace(/`{1,3}[^`]*`{1,3}/g, "")
+      .replace(/^[-*•]\s+/gm, "")
+      .replace(/^\d+\.\s+/gm, "")
+      .replace(/^>\s*/gm, "")
+      .replace(/---+/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\n{2,}/g, "। ")
+      .replace(/\n/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   // ── Microsoft Edge TTS — server /voice endpoint ──────────────────
   async function fetchEdgeTTS(text) {
-    text = stripEmoji(text);
+    text = stripForTTS(text);
     if (!text) return null;
     try {
       const r = await fetch(api("/voice"), {
@@ -273,12 +300,13 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     if (!text || !text.trim()) return;
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
-    if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> চলছে`;
+    if (btn) btn.innerHTML = `<span class="tts-dots"><span></span><span></span><span></span></span>`;
 
     fetchEdgeTTS(text).then(url => {
       if (url) {
         const audio = new Audio(url);
         currentAudio = audio;
+        if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> চলছে`;
         audio.onended = () => {
           currentAudio = null;
           URL.revokeObjectURL(url);
@@ -296,16 +324,18 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     });
   }
 
-  function speakAndWait(text) {
+  function speakAndWait(text, statusEl = null) {
     return new Promise((resolve) => {
       if (!text || !text.trim()) return resolve();
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
       if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
+      if (statusEl) statusEl.innerHTML = `লোড হচ্ছে <span class="tts-dots"><span></span><span></span><span></span></span>`;
 
       fetchEdgeTTS(text).then(url => {
         if (!url) return resolve();
         const audio = new Audio(url);
         currentAudio = audio;
+        if (statusEl) statusEl.textContent = "বলছি…";
         audio.onended = () => {
           currentAudio = null;
           URL.revokeObjectURL(url);
@@ -571,9 +601,8 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       $("#audioCallStatus").textContent = "ভাবছি…";
       const reply = await callChat(said);
       if (!callOn) return;
-      $("#audioCallStatus").textContent = "বলছি…";
       $("#audioCallCaption").textContent = reply;
-      await speakAndWait(reply);
+      await speakAndWait(reply, $("#audioCallStatus"));
       if (!callOn) return;
       $("#audioCallStatus").textContent = "শুনছি…";
       callLoop();
@@ -646,9 +675,8 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
         });
         const data = await r.json();
         const reply = data.reply || "কিছু বুঝতে পারলাম না।";
-        $("#videoCallStatus").textContent = "বলছি…";
         $("#videoCallCaption").textContent = reply;
-        await speakAndWait(reply);
+        await speakAndWait(reply, $("#videoCallStatus"));
       } catch { $("#videoCallCaption").textContent = "নেটওয়ার্ক সমস্যা"; }
       if (!vcOn) return;
       $("#videoCallStatus").textContent = "কানেক্টেড";

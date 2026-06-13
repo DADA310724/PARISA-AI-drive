@@ -706,17 +706,37 @@ function stripEmoji(str) {
     .trim();
 }
 
+function stripForTTS(str) {
+  return stripEmoji(str)
+    .replace(/\[IMAGE:[^\]]*\]/g, "")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/\*\*(.+?)\*\*/gs, "$1")
+    .replace(/\*(.+?)\*/gs, "$1")
+    .replace(/__(.+?)__/gs, "$1")
+    .replace(/_(.+?)_/gs, "$1")
+    .replace(/`{1,3}[^`]*`{1,3}/g, "")
+    .replace(/^[-*•]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/^>\s*/gm, "")
+    .replace(/---+/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\n{2,}/g, "। ")
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function synthesizeEdgeTTS(text, gender = "female") {
-  const voiceName = gender === "male" ? "bn-BD-PradeepNeural" : "bn-BD-NabanitaNeural";
-  const cleanText  = stripEmoji(String(text)).slice(0, 1000)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const voiceName  = gender === "male" ? "bn-BD-PradeepNeural" : "bn-BD-NabanitaNeural";
+  const ttsText    = stripForTTS(String(text)).slice(0, 1000);
+  const cleanText  = ttsText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
   // ── Method 1: edge-tts npm package (local dev) ──
   if (MsEdgeTTS) {
     try {
       const tts = new MsEdgeTTS();
       await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-      const { audioStream } = tts.toStream(text);
+      const { audioStream } = tts.toStream(ttsText);
       const chunks = [];
       await new Promise((resolve) => {
         audioStream.on("data", d => chunks.push(d));
