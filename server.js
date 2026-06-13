@@ -94,38 +94,6 @@ async function callWithFailover(pool, attempt) {
   throw lastErr || new Error(`${pool.name}: all failed`);
 }
 
-// ─── Reply Text Cleaner ──────────────────────────────────────────
-function cleanReply(text) {
-  if (!text) return text;
-  return text
-    // bold/italic markdown বাদ
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    // heading বাদ
-    .replace(/^#{1,6}\s+/gm, "")
-    // bullet list বাদ
-    .replace(/^[\*\-•]\s+/gm, "")
-    // numbered list বাদ — কিন্তু বাংলা সংখ্যায় রাখো
-    .replace(/^(\d+)\.\s+/gm, (_, n) => {
-      const bn = "০১২৩৪৫৬৭৮৯";
-      const num = String(n).split("").map(d => bn[parseInt(d)] || d).join("");
-      return num + ". ";
-    })
-    // English number → বাংলা number
-    .replace(/\b(\d+)\b/g, (n) => {
-      const bn = "০১২৩৪৫৬৭৮৯";
-      return String(n).split("").map(d => bn[parseInt(d)] || d).join("");
-    })
-    // ইমোজি বাদ (basic range)
-    .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
-    .replace(/[\u{2600}-\u{27BF}]/gu, "")
-    // বাড়তি blank line কমাও
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 // ─── Chat History Database ────────────────────────────────────────
 import { readFileSync, existsSync } from "fs";
 
@@ -371,13 +339,6 @@ async function refreshDriveMemory() {
 
 refreshDriveMemory().catch(() => {});
 
-// ── প্রতি ৩০ মিনিটে Drive auto-refresh ──────────────────────────────
-// নতুন screenshot/ছবি/ফাইল দিলে AI automatically জেনে নেবে
-setInterval(() => {
-  console.log("🔄 Drive auto-refresh...");
-  refreshDriveMemory().catch(e => console.warn("Auto-refresh error:", e.message));
-}, 30 * 60 * 1000); // ৩০ মিনিট
-
 // ─── রুবেলের জীবনের পূর্ণ ইতিহাস (AI এর স্থায়ী স্মৃতি) ──────────
 const RUBEL_HISTORY = `
 === রুবেল ও পারিসার সম্পর্কের সম্পূর্ণ ইতিহাস ===
@@ -518,20 +479,12 @@ function buildSystemPrompt(userName = "আপনি", userQuery = "") {
 - সর্বদা পরিষ্কার বাংলায় উত্তর দেবে
 - প্রমাণ না থাকলে স্পষ্ট বলবে
 - ব্যবহারকারীকে সম্মানের সাথে ভালোবাসার সাথে কথা বলবে
-- কেউ "Hi", "Hello", "হ্যালো" বললে স্বাভাবিক বাংলায় সাড়া দেবে
-- কখনো ফাইলের নাম যেমন "history-context-2.txt" ইত্যাদি উল্লেখ করবে না
+- কেউ "Hi", "Hello", "হ্যালো" বললে "ওয়ালাইকুম সালাম" বলবে না — স্বাভাবিক বাংলায় সাড়া দেবে যেমন "হ্যাঁ দাদা, বলুন!" বা "কেমন আছেন দাদা?"
+- কখনো ফাইলের নাম যেমন "history-context-2.txt", "My Wife...😘😘" ইত্যাদি উল্লেখ করবে না — এগুলো অভ্যন্তরীণ
 - কখনো "রেফারেন্স:", "খণ্ড ২", "টাইমলাইনে উল্লেখ আছে" এই ধরনের technical কথা বলবে না
 - সরাসরি স্বাভাবিকভাবে উত্তর দেবে যেন তুমি সব মনে রাখো
 - স্ক্রিনশট দেখাতে হলে [IMAGE:FILE_ID] format ব্যবহার করো
-
-⚠️ TEXT FORMAT — এই নিয়মগুলো কঠোরভাবে মানতে হবে:
-- কখনো ** bold ** বা __ বা # হেডার ব্যবহার করবে না
-- কখনো bullet point (-, *, •) দিয়ে list বানাবে না
-- কখনো numbered list (1. 2. 3.) বানাবে না
-- সব উত্তর সাধারণ paragraph আকারে লিখবে
-- বাংলা সংখ্যা (১, ২, ৩) ব্যবহার করবে, English number (1, 2, 3) নয়
-- ইমোজি ব্যবহার করবে না
-- শুধু বাংলা text — কোনো markdown formatting নেই
+- বাংলা সংখ্যা (১২৩৪৫) ব্যবহার করো, English number (12345) নয়
 
 তোমার জ্ঞান:
 
@@ -690,7 +643,26 @@ async function logFirebase(data) {
 }
 
 // ─── Edge TTS ─────────────────────────────────────────────────────
+function cleanTextForTTS(text) {
+  return text
+    // markdown/symbols সরাও
+    .replace(/\*\*|__|\*|_|`|~~|#+\s/g, "")
+    // emoji সরাও
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "")
+    // bullet points সরাও
+    .replace(/^[•\-\*]\s*/gm, "")
+    // star/dot চিহ্ন সরাও
+    .replace(/[★☆✨⭐🌟✦•·]/g, "")
+    // numbered list সরাও (১. ২. ৩.)
+    .replace(/^[০-৯\d]+[।\.\)]\s*/gm, "")
+    // extra spaces/newlines ঠিক করো
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function synthesizeEdgeTTS(text, gender = "female") {
+  text = cleanTextForTTS(text);
+  if (!text) return null;
   if (!MsEdgeTTS) {
     // Fallback: Google Translate TTS
     try {
@@ -708,7 +680,15 @@ async function synthesizeEdgeTTS(text, gender = "female") {
   try {
     const tts = new MsEdgeTTS();
     await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    const { audioStream } = tts.toStream(text);
+    // SSML দিয়ে natural/emotional voice
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="bn-BD">
+  <voice name="${voiceName}">
+    <mstts:express-as style="gentle">
+      <prosody rate="+5%" pitch="+0Hz">${text.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</prosody>
+    </mstts:express-as>
+  </voice>
+</speak>`;
+    const { audioStream } = tts.toStream(ssml, true);
     const chunks = [];
     await new Promise((resolve, reject) => {
       audioStream.on("data", (d) => chunks.push(d));
@@ -785,8 +765,7 @@ function mount(prefix) {
         generationConfig: { temperature: 0.85, maxOutputTokens: 2048 },
       };
       const { reply, provider } = await chatWithFallback(body, !!image);
-      const rawReply = reply || "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না।";
-      const finalReply = cleanReply(rawReply);
+      const finalReply = reply || "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না।";
       logFirebase({ userName, userMessage: lastUserMsg2, aiReply: finalReply, provider, hasImage: !!image }).catch(() => {});
       const tgText = `👤 ${userName}: ${lastUserMsg2}\n\n🤖 PARISA: ${finalReply}`;
       image ? sendTelegram(tgText, image).catch(() => {}) : sendTelegram(tgText).catch(() => {});
@@ -826,7 +805,7 @@ function mount(prefix) {
     try {
       const { text, gender = "female" } = req.body || {};
       if (!text) return res.status(204).end();
-      const audio = await synthesizeEdgeTTS(String(text).slice(0, 2000), gender);
+      const audio = await synthesizeEdgeTTS(String(text).slice(0, 4000), gender);
       if (!audio) return res.status(204).end();
       res.setHeader("Content-Type", "audio/mpeg");
       res.send(audio);
