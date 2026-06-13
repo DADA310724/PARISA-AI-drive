@@ -688,3 +688,76 @@ textarea, input, select { font-family: inherit; color: inherit; }
   display: block; border: 1px solid rgba(180, 240, 250, .2);
   box-shadow: 0 4px 16px rgba(0, 0, 0, .3);
 }
+
+/* ═══════════════ AUDIO CALL LAYOUT FIX ═══════════════ */
+#audioCallView {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.call-header {
+  position: absolute;
+  top: max(24px, env(safe-area-inset-top));
+  left: 0; right: 0;
+  text-align: center;
+}
+.avatar-wrap {
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-circle {
+  margin: 0 auto;
+}
+/* Remove eye blink overlay */
+.avatar-blink { display: none !important; }
+
+/* Status bar - শুনছি/বলছি ছোট করে নিচে */
+.call-status-bar {
+  font-size: 13px;
+  color: rgba(174, 226, 236, 0.7);
+  text-align: center;
+  min-height: 18px;
+  letter-spacing: 1px;
+}
+
+/* Caption মাঝখানে সুন্দরভাবে */
+#audioCallCaption {
+  position: static;
+  max-width: 85%;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 10px 16px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 12px;
+  min-height: 0;
+  backdrop-filter: blur(8px);
+}
+#audioCallCaption:empty { display: none; }
+
+/* Controls fixed at bottom */
+.call-controls-row {
+  position: absolute;
+  bottom: max(36px, env(safe-area-inset-bottom));
+  left: 0; right: 0;
+}
+
+/* ═══════════════ VIDEO CALL CAPTION FIX ═══════════════ */
+.vc-caption {
+  position: absolute !important;
+  bottom: 130px !important;
+  left: 16px !important;
+  right: 16px !important;
+  text-align: center;
+  background: rgba(0,0,0,0.5) !important;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+.vc-caption:empty { display: none; }
