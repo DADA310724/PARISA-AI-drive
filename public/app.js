@@ -6,8 +6,8 @@
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   // ── LocalStorage keys ────────────────────────────────────────────
-  const LS_SETTINGS = "parisa.settings.v3";
-  const LS_CHATS    = "parisa.chats.v2";
+  const LS_SETTINGS = "parisa.settings.v2";
+  const LS_CHATS    = "parisa.chats.v1";
   const LS_ACTIVE   = "parisa.active.v1";
   const LS_WELCOMED = "parisa.welcomed.v1";
 
@@ -123,20 +123,8 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   }
 
   function renderMarkdown(text) {
-    try {
-      // Step 1: markdown parse
-      const html = marked.parse(text, { breaks: true, gfm: true });
-      // Step 2: DOMPurify
-      let clean = DOMPurify.sanitize(html, {
-        ADD_TAGS: ["img"], ADD_ATTR: ["src","class","loading","onerror"]
-      });
-      // Step 3: [IMAGE:id] → actual img (AFTER sanitize, so not stripped)
-      clean = clean.replace(/\[IMAGE:([\w\-]+)\]/g,
-        (_, id) => `<img src="${BASE}/image/${id}" class="drive-img" loading="lazy" onerror="this.style.display='none'" />`
-      );
-      return clean;
-    }
-    catch (e) { return text.replace(/\n/g, "<br/>"); }
+    try { return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true })); }
+    catch { return text.replace(/\n/g, "<br/>"); }
   }
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
   function escapeHtml(s) {
@@ -213,11 +201,8 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   $("#saveSettings").onclick = () => {
     const sel = document.querySelector('input[name="voiceGender"]:checked');
     settings.voiceGender = sel ? sel.value : "female";
-    const newName = $("#userName").value.trim();
-    settings.userName = newName.length > 0 ? newName : "দাদা";
+    settings.userName    = $("#userName").value.trim() || "দাদা";
     saveSettings();
-    const saved = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}");
-    console.log("Saved userName:", saved.userName);
     closeSettings();
   };
   $("#resetSettings").onclick = () => {
@@ -231,52 +216,89 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     speak("আসসালামু ওয়ালাইকুম। আমি পারিসা, আপনাকে স্বাগতম।");
   };
 
-  // ── Voice: Microsoft Edge TTS ─────────────────────────────────────
+  // ── Voice: Browser TTS (Microsoft Edge — Nabanita Neural) ──────────
   let currentAudio = null;
+  let currentUtter = null;
 
-  async function speak(text, btn = null) {
-    if (!text || !text.trim()) return;
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> লোড…`;
-    try {
-      const r = await fetch(api("/voice"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.slice(0, 1500), gender: settings.voiceGender || "female" }),
-      });
-      if (!r.ok || r.status === 204) {
-        if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
-        return;
-      }
-      const blob = await r.blob();
-      currentAudio = new Audio(URL.createObjectURL(blob));
-      if (btn) {
-        btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> চলছে`;
-        currentAudio.onended = () => (btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`);
-      }
-      await currentAudio.play();
-    } catch {
-      if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+  // Browser-এ available voices থেকে বাংলা voice খোঁজো
+  function getBanglaVoice(gender = "female") {
+    const voices = speechSynthesis.getVoices();
+    // Microsoft Nabanita (female) বা Pradeep (male) খোঁজো
+    const preferred = gender === "male"
+      ? ["Pradeep", "pradeep", "bn-BD-PradeepNeural", "Microsoft Pradeep"]
+      : ["Nabanita", "nabanita", "bn-BD-NabanitaNeural", "Microsoft Nabanita"];
+
+    for (const name of preferred) {
+      const v = voices.find(v => v.name.includes(name));
+      if (v) return v;
     }
+    // যেকোনো বাংলা voice
+    const bn = voices.find(v => v.lang === "bn-BD" || v.lang === "bn" || v.lang.startsWith("bn"));
+    if (bn) return bn;
+    // শেষ fallback — default voice
+    return voices[0] || null;
+  }
+
+  function speak(text, btn = null) {
+    if (!text || !text.trim()) return;
+
+    // আগের audio বন্ধ করো
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
+
+    if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> চলছে`;
+
+    const utter = new SpeechSynthesisUtterance(text.slice(0, 1500));
+    utter.lang  = "bn-BD";
+    utter.rate  = 0.92;
+    utter.pitch = 1.0;
+
+    // voice load হওয়ার পর set করো
+    const setVoice = () => {
+      const v = getBanglaVoice(settings.voiceGender || "female");
+      if (v) utter.voice = v;
+    };
+    if (speechSynthesis.getVoices().length) {
+      setVoice();
+    } else {
+      speechSynthesis.onvoiceschanged = setVoice;
+    }
+
+    utter.onend = () => {
+      currentUtter = null;
+      if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+    };
+    utter.onerror = () => {
+      currentUtter = null;
+      if (btn) btn.innerHTML = `<svg class="ic"><use href="#i-volume"/></svg> ভয়েস`;
+    };
+
+    currentUtter = utter;
+    speechSynthesis.speak(utter);
   }
 
   function speakAndWait(text) {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
       if (!text || !text.trim()) return resolve();
-      try {
-        if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-        const r = await fetch(api("/voice"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text.slice(0, 1500), gender: settings.voiceGender || "female" }),
-        });
-        if (!r.ok || r.status === 204) return resolve();
-        const blob = await r.blob();
-        currentAudio = new Audio(URL.createObjectURL(blob));
-        currentAudio.onended = () => resolve();
-        currentAudio.onerror = () => resolve();
-        await currentAudio.play();
-      } catch { resolve(); }
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      if (currentUtter) { speechSynthesis.cancel(); currentUtter = null; }
+
+      const utter = new SpeechSynthesisUtterance(text.slice(0, 1500));
+      utter.lang  = "bn-BD";
+      utter.rate  = 0.92;
+      utter.pitch = 1.0;
+
+      const setVoice = () => {
+        const v = getBanglaVoice(settings.voiceGender || "female");
+        if (v) utter.voice = v;
+      };
+      if (speechSynthesis.getVoices().length) setVoice();
+      else speechSynthesis.onvoiceschanged = setVoice;
+
+      utter.onend   = () => { currentUtter = null; resolve(); };
+      utter.onerror = () => { currentUtter = null; resolve(); };
+      currentUtter  = utter;
+      speechSynthesis.speak(utter);
     });
   }
 
@@ -494,32 +516,17 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   };
 
   // ── Audio call ─────────────────────────────────────────────────────
-  let callOn = false, callRecognizer = null, callMuted = false;
+  let callOn = false, callRecognizer = null;
   $("#audioCallBtn").onclick  = () => startAudioCall();
   $("#endAudioCall").onclick  = () => endAudioCall();
-  $("#muteAudioCall").onclick = () => {
-    callMuted = !callMuted;
-    $("#muteAudioCall").classList.toggle("muted", callMuted);
-    if (callMuted && callRecognizer) { try { callRecognizer.stop(); } catch {} }
-    else if (!callMuted && callOn) callLoop();
-  };
-
-  function setAvatarState(state) {
-    const circle = $("#avatarCircle");
-    const wave = $("#audioWave");
-    if (!circle || !wave) return;
-    circle.className = "avatar-circle " + state;
-    wave.className = "audio-wave " + state;
-    const status = { listening: "শুনছি…", talking: "বলছি…", thinking: "ভাবছি…" };
-    if (status[state]) $("#audioCallStatus").textContent = status[state];
-  }
+  $("#muteAudioCall").onclick = () => { if (callRecognizer) callRecognizer.stop(); };
 
   async function startAudioCall() {
     if (!SR) { alert("ব্রাউজার ভয়েস কল সাপোর্ট করে না।"); return; }
-    callOn = true; callMuted = false;
+    callOn = true;
     $("#audioCallView").hidden = false;
+    $("#audioCallStatus").textContent = "শুনছি…";
     $("#audioCallCaption").textContent = "";
-    setAvatarState("listening");
     callLoop();
   }
   function endAudioCall() {
@@ -529,7 +536,7 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
     $("#audioCallView").hidden = true;
   }
   function callLoop() {
-    if (!callOn || callMuted) return;
+    if (!callOn) return;
     callRecognizer = makeRecognizer();
     if (!callRecognizer) return;
     let finalText = "";
@@ -542,14 +549,14 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       if (!callOn) return;
       const said = finalText.trim();
       if (!said) return setTimeout(callLoop, 200);
-      setAvatarState("thinking");
+      $("#audioCallStatus").textContent = "ভাবছি…";
       const reply = await callChat(said);
       if (!callOn) return;
-      setAvatarState("talking");
+      $("#audioCallStatus").textContent = "বলছি…";
       $("#audioCallCaption").textContent = reply;
       await speakAndWait(reply);
       if (!callOn) return;
-      setAvatarState("listening");
+      $("#audioCallStatus").textContent = "শুনছি…";
       callLoop();
     };
     callRecognizer.start();
@@ -571,37 +578,11 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
   }
 
   // ── Video call ─────────────────────────────────────────────────────
-  let vcStream = null, vcFacing = "user", vcOn = false, vcRecognizer = null, vcMuted = false;
+  let vcStream = null, vcFacing = "user", vcOn = false, vcRecognizer = null;
   $("#videoCallBtn").onclick   = () => startVideoCall();
   $("#endVideoCall").onclick   = () => endVideoCall();
   $("#flipVideoCall").onclick  = async () => { vcFacing = vcFacing === "user" ? "environment" : "user"; await openVcCam(); };
-  $("#muteVideoCall").onclick  = () => {
-    vcMuted = !vcMuted;
-    $("#muteVideoCall").classList.toggle("muted", vcMuted);
-    if (vcMuted && vcRecognizer) { try { vcRecognizer.stop(); } catch {} }
-    else if (!vcMuted && vcOn) videoCallLoop();
-  };
-  $("#askVideoBtn").onclick = () => {
-    const img = snapshot($("#videoCallVideo"), $("#videoCallCanvas"));
-    setVcState("thinking");
-    fetch(api("/analyze"), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "এই ভিডিওতে কী দেখছ? বাংলায় বিস্তারিত বল।", file: img, mime: "image/jpeg", userName: settings.userName })
-    }).then(r => r.json()).then(d => {
-      const reply = d.reply || "বুঝতে পারলাম না।";
-      $("#videoCallCaption").textContent = reply;
-      setVcState("talking");
-      speakAndWait(reply).then(() => setVcState("idle"));
-    }).catch(() => setVcState("idle"));
-  };
-
-  function setVcState(state) {
-    const wave = $("#vcAiWave");
-    if (!wave) return;
-    wave.className = "vc-ai-wave " + (state === "talking" ? "" : "idle");
-    const statuses = { talking: "বলছি…", thinking: "ভাবছি…", idle: "কানেক্টেড", listening: "শুনছি…" };
-    $("#videoCallStatus").textContent = statuses[state] || "কানেক্টেড";
-  }
+  $("#muteVideoCall").onclick  = () => { if (vcRecognizer) vcRecognizer.stop(); };
 
   async function openVcCam() {
     try {
@@ -637,7 +618,7 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
       if (!vcOn) return;
       const said = finalText.trim();
       if (!said) return setTimeout(videoCallLoop, 200);
-      setVcState("thinking");
+      $("#videoCallStatus").textContent = "ভাবছি…";
       const img = snapshot($("#videoCallVideo"), $("#videoCallCanvas"));
       try {
         const r = await fetch(api("/analyze"), {
@@ -646,12 +627,12 @@ PARISA MEMORY PORTAL এ আপনাকে স্বাগতম।
         });
         const data = await r.json();
         const reply = data.reply || "কিছু বুঝতে পারলাম না।";
-        setVcState("talking");
+        $("#videoCallStatus").textContent = "বলছি…";
         $("#videoCallCaption").textContent = reply;
         await speakAndWait(reply);
       } catch { $("#videoCallCaption").textContent = "নেটওয়ার্ক সমস্যা"; }
       if (!vcOn) return;
-      setVcState("listening");
+      $("#videoCallStatus").textContent = "কানেক্টেড";
       videoCallLoop();
     };
     vcRecognizer.start();
